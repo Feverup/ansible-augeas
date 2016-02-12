@@ -33,13 +33,13 @@ requirements:
 options:
   command:
     required: false
-    choices: [ set, ins, rm, match ]
+    choices: [ set, ins, rm, match, lensmatch ]
     description:
-      - 'Whether given path should be modified, inserted, removed or matched. Command "match" passes results through "result" attribute - every item on this list is an object with "label" and "value" (check third example below). Other commands returns true in case of any modification (so this value is always equal to "changed" attribue - this make more sens in case of bulk execution)'
+      - 'Whether given path should be modified, inserted, removed or matched. Command "match" (and "lensmatch") passes results through "result" attribute - every item on this list is an object with "label" and "value" (check third example below). Other commands returns true in case of any modification (so this value is always equal to "changed" attribue - this make more sens in case of bulk execution)'
   path:
     required: false
     description:
-      - 'Variable path.'
+      - 'Variable path. With `lensmatch`, it is the relative path within the file tree.'
   value:
     required: false
     description:
@@ -53,6 +53,14 @@ options:
     choices: [before, after]
     description:
       - 'Position of node insertion against given path.'
+  lens:
+    required: false
+    description:
+      - 'Augeas lens to be loaded.'
+  file:
+    required: false
+    description:
+      - 'File to parse.'
   commands:
     required: false
     description:
@@ -77,6 +85,9 @@ examples:
         action: augeas command="set" path="/files/etc/ssh/sshd_config/AllowUsers/01" value="{{ user }}"
         when: "user_entry.result|length == 0"
     description: "Quite complex modification - fetch values lists and append new value only if it doesn't exists already in config"
+
+  - code: 'action: augeas commands="lensmatch" lens="sshd" file="/home/paluh/programming/ansible/tests/sshd_config" path="AllowUsers/*"'
+    description: Modify sshd_config in custom location
 
   - code: |
       - name: Add new host to /etc/hosts
@@ -278,6 +289,7 @@ def parse_commands(commands):
         'set': [path_parser, AnythingParser('value')],
         'rm': [path_parser],
         'match': [path_parser],
+        'lensmatch': [path_parser, NonEmptyParser('lens'), NonEmptyParser('file')],
         'ins': [NonEmptyParser('label'), OneOfParser('where', ['before', 'after']), path_parser],
         'transform': [NonEmptyParser('lens'), OneOfParser('filter', ['incl', 'excl']), NonEmptyParser('file')],
         'load': []
@@ -406,6 +418,10 @@ def execute(augeas_instance, commands):
             augeas_instance.transform(lens, file_, excl)
         elif command == 'load':
             augeas_instance.load()
+        elif command == 'lensmatch':
+            augeas_instance.transform(params['lens'], params['file'])
+            augeas_instance.load()
+            result = [{'label': s, 'value': augeas_instance.get(s)} for s in augeas_instance.match(params['path'])]
         else: # match
             result = [{'label': s, 'value': augeas_instance.get(s)} for s in augeas_instance.match(**params)]
         results.append((command + ' ' + ' '.join(p if p else '""' for p in params.values()), result))
@@ -421,7 +437,7 @@ def main():
         argument_spec=dict(
             loadpath=dict(default=None),
             root=dict(default=None),
-            command=dict(required=False, choices=['set', 'rm', 'match', 'ins', 'transform', 'load']),
+            command=dict(required=False, choices=['set', 'rm', 'match', 'lensmatch', 'ins', 'transform', 'load']),
             path=dict(aliases=['name', 'context']),
             value=dict(default=None),
             commands=dict(default=None),
@@ -461,6 +477,9 @@ def main():
                       'filter': module.params['filter']}
         elif command == 'load':
             params = {}
+        elif command == 'lensmatch':
+            params = {'lens': module.params['lens'], 'file': module.params['file']}
+            params['path'] = "/files%s/%s" % ( params['file'] , module.params['path'] )
         else: # rm or match
             params = {'path': module.params['path']}
         commands = [(command, params)]
