@@ -287,10 +287,10 @@ def parse_commands(commands):
     """
     path_parser = NonEmptyParser('path')
     COMMANDS = {
-        'set': [path_parser, AnythingParser('value')],
-        'rm': [path_parser],
-        'match': [path_parser],
-        'ins': [NonEmptyParser('label'), OneOfParser('where', ['before', 'after']), path_parser],
+        'set': [path_parser, AnythingParser('value'), AnythingParser('lens'), AnythingParser('file')],
+        'rm': [path_parser, AnythingParser('lens'), AnythingParser('file')],
+        'match': [path_parser, AnythingParser('lens'), AnythingParser('file')],
+        'ins': [NonEmptyParser('label'), OneOfParser('where', ['before', 'after']), path_parser, AnythingParser('lens'), AnythingParser('file')],
         'transform': [NonEmptyParser('lens'), OneOfParser('filter', ['incl', 'excl']), NonEmptyParser('file')],
         'load': []
     }
