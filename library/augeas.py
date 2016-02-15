@@ -411,23 +411,37 @@ def execute(augeas_instance, commands):
             else:
                 result = False
         elif command == 'ins':
-            path = params['path']
             label = params['label']
+            if params['comment']:
+                path = os.path.dirname(params['path'])
+                path += '/#comment[ . =~ regexp("%s( |=).*") ]' % label
+            else:
+                path = params['path']
             where = params['where']
             try:
                 augeas_instance.insert(path, label, where == 'before')
             except ValueError:
-                raise InsertError(command, params, augeas_instance)
+                try:
+                    augeas_instance.insert(params['path'], label, where == 'before')
+                except ValueError:
+                    raise InsertError(command, params, augeas_instance)
             result = changed = True
         elif command == 'edit':
             label = params['label']
-            path = params['path']
+            if params['comment']:
+                path = os.path.dirname(params['path'])
+                path += '/#comment[ . =~ regexp("%s( |=).*") ]' % label
+            else:
+                path = params['path']
             node = augeas_instance.match("%s/%s" % (os.path.dirname(path), label))
             if not node:
                 try:
-                    node = [ augeas_instance.insert(params['path'], label, False) ]
+                    node = [ augeas_instance.insert(path, label, False) ]
                 except ValueError:
-                    raise InsertError(command, params, augeas_instance)
+                    try:
+                        node = [ augeas_instance.insert(params['path'], label, False) ]
+                    except ValueError:
+                        raise InsertError(command, params, augeas_instance)
             path = "%s/%s" % (os.path.dirname(path), label)
             value = params['value']
             if augeas_instance.get(path) != value:
@@ -445,7 +459,7 @@ def execute(augeas_instance, commands):
             augeas_instance.load()
         else: # match
             result = [{'label': s, 'value': augeas_instance.get(s)} for s in augeas_instance.match(params['path'])]
-        results.append((command + ' ' + ' '.join(p if p else '""' for p in params.values()), result))
+        results.append((command + ' ' + ' '.join(p if isinstance(p , str) else '""' for p in params.values()), result))
 
     try:
         augeas_instance.save()
@@ -464,6 +478,7 @@ def main():
             commands=dict(default=None),
             where=dict(default=None),
             label=dict(default=None),
+            comment=dict(default=False, type='bool'),
             lens=dict(default=None),
             file=dict(defulat=None),
             filter=dict(default=None)
@@ -482,6 +497,8 @@ def main():
     commands = None
     if module.params['command'] is not None:
         command = module.params['command']
+        if module.params['comment'] and command not in ('ins', 'edit'):
+            module.fail_json(msg='You can only set "comment" with "ins" or "edit" commands.')
         if command == 'set':
             if module.params['value'] is None:
                 module.fail_json(msg='You should use "value" argument with "set" command.')
@@ -501,7 +518,7 @@ def main():
             if module.params['value'] is None:
                 module.fail_json(msg='You have to use "value" argument with "edit" command.')
             params = {'label': module.params['label'], 'path': module.params['path'],
-                      'value': module.params['value']}
+                      'value': module.params['value'], 'comment': module.params['comment']}
         elif command == 'transform':
             params = {'lens': module.params['lens'], 'file': module.params['file'],
                       'filter': module.params['filter']}
