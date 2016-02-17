@@ -433,13 +433,16 @@ def execute(augeas_instance, commands):
                 path += '/#comment[ . =~ regexp("%s( |=).*") ]' % label
             else:
                 path = params['path']
+            result = changed = False
             node = augeas_instance.match("%s/%s" % (os.path.dirname(path), label))
             if not node:
                 try:
                     node = [ augeas_instance.insert(path, label, False) ]
+                    result = changed = True
                 except ValueError:
                     try:
                         node = [ augeas_instance.insert(params['path'], label, False) ]
+                        result = changed = True
                     except ValueError:
                         raise InsertError(command, params, augeas_instance)
             path = "%s/%s" % (os.path.dirname(path), label)
@@ -450,8 +453,6 @@ def execute(augeas_instance, commands):
                 except ValueError:
                     raise SetError(command, params, augeas_instance)
                 result = changed = True
-            else:
-                result = False
         elif command == 'transform':
             excl = params['filter'] == 'excl'
             augeas_instance.transform(lens, file_, excl)
@@ -459,7 +460,7 @@ def execute(augeas_instance, commands):
             augeas_instance.load()
         else: # match
             result = [{'label': s, 'value': augeas_instance.get(s)} for s in augeas_instance.match(params['path'])]
-        results.append((command + ' ' + ' '.join(p if isinstance(p , str) else '""' for p in params.values()), result))
+        results.append((command + ' ' + ' '.join(p if isinstance(p, str) else '""' for p in params.values()), result))
 
     try:
         augeas_instance.save()
@@ -509,14 +510,13 @@ def main():
             if module.params['path'] is None:
                 module.fail_json(msg='You have to use "path" argument with "ins" command.')
             params = {'label': module.params['label'], 'path': module.params['path'],
-                      'where': module.params['where'] or 'before'}
+                      'where': module.params['where'] or 'before',
+                      'comment': module.params['comment']}
         elif command == 'edit':
             if module.params['label'] is None:
                 module.fail_json(msg='You have to use "label" argument with "edit" command.')
             if module.params['path'] is None:
                 module.fail_json(msg='You have to use "path" argument with "edit" command.')
-            if module.params['value'] is None:
-                module.fail_json(msg='You have to use "value" argument with "edit" command.')
             params = {'label': module.params['label'], 'path': module.params['path'],
                       'value': module.params['value'], 'comment': module.params['comment']}
         elif command == 'transform':
